@@ -1,30 +1,88 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="uk">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Timeline Card Game</title>
-    <link rel="stylesheet" href="styles.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#111827">
+    <meta name="description" content="Мобільна гра про хронологію української історії">
+    <title>Не загубись у часі</title>
+    <link rel="icon" type="image/png" href="./images/icon.png">
+    <link rel="manifest" href="./manifest.json">
+    <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
-    <div id="game-container">
-        <div id="game-info">
-            <span>Score: <span id="score">0</span></span>
-            <span>Lives: <span id="lives">❤️❤️❤️</span></span>
-            <span>Progress: <span id="progress">0/10</span></span>
-        </div>
-        <div id="timeline">
-            <div class="placement-indicator"></div>
-        </div>
-        <div id="current-card" class="card" draggable="true">
-            <div class="card-content">
-                <div class="card-title">Draw a card</div>
-                <div class="card-year">to start!</div>
+    <main id="app" class="app-shell">
+        <header class="game-header">
+            <a class="brand" href="./" aria-label="Почати нову гру">
+                <span class="brand__orbit" aria-hidden="true">◌</span>
+                <span>
+                    <strong>Не загубись</strong>
+                    <small>у часі</small>
+                </span>
+            </a>
+
+            <dl class="game-stats" aria-label="Стан гри">
+                <div class="stat">
+                    <dt>Рахунок</dt>
+                    <dd id="score">0</dd>
+                </div>
+                <div class="stat">
+                    <dt>Життя</dt>
+                    <dd><span aria-hidden="true">♥</span> <span id="lives">3</span></dd>
+                </div>
+                <div class="stat">
+                    <dt>Події</dt>
+                    <dd id="progress">1/10</dd>
+                </div>
+            </dl>
+        </header>
+
+        <section id="timeline-region" class="timeline-region" aria-labelledby="timeline-title">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">Твоя лінія</p>
+                    <h1 id="timeline-title">Що було раніше?</h1>
+                </div>
+                <p id="timeline-hint" class="timeline-hint">Витягни подію, щоб обрати її місце.</p>
             </div>
-            <div class="card-back">?</div>
+            <div class="timeline-frame">
+                <div id="timeline" class="timeline" role="list" aria-label="Хронологія подій"></div>
+            </div>
+        </section>
+
+        <section id="current-panel" class="current-panel" aria-label="Поточна подія" aria-live="polite">
+            <div id="current-card-host" class="current-card-host"></div>
+            <button id="draw-event" class="primary-action" type="button">
+                <span>Витягнути подію</span>
+                <span aria-hidden="true">→</span>
+            </button>
+            <div id="feedback" class="feedback" role="status" aria-live="polite"></div>
+        </section>
+    </main>
+
+    <dialog id="result-dialog" class="result-dialog" aria-labelledby="result-title">
+        <div class="result-dialog__content">
+            <p class="eyebrow">Партію завершено</p>
+            <h2 id="result-title">Твій результат</h2>
+            <p id="result-message" class="result-message"></p>
+            <dl class="result-grid">
+                <div>
+                    <dt>Рахунок</dt>
+                    <dd id="result-score">0</dd>
+                </div>
+                <div>
+                    <dt>Точність</dt>
+                    <dd id="result-accuracy">0%</dd>
+                </div>
+                <div>
+                    <dt>Найкраща серія</dt>
+                    <dd id="result-streak">0</dd>
+                </div>
+            </dl>
+            <button id="restart-game" class="primary-action" type="button">Зіграти ще раз</button>
         </div>
-        <button id="draw-card">Draw Card</button>
-        <div id="feedback"></div>
-    </div>
+    </dialog>
+
+    <script type="module" src="./script.js"></script>
 </body>
 </html>

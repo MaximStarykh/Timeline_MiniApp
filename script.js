@@ -1,245 +1,288 @@
-const timeline = document.getElementById('timeline');
-        const currentCard = document.getElementById('current-card');
-        const drawCardButton = document.getElementById('draw-card');
-        const scoreElement = document.getElementById('score');
-        const livesElement = document.getElementById('lives');
-        const progressElement = document.getElementById('progress');
-        const placementIndicator = document.querySelector('.placement-indicator');
+import {
+  createGame,
+  createSeededRandom,
+  drawEvent,
+  placeCurrent,
+} from './game-engine.js';
+import { CATEGORY_META, EVENTS } from './events.js';
 
-        let score = 0;
-        let lives = 3;
-        let progress = 0;
-        const totalCards = 10;
+const elements = {
+  score: document.getElementById('score'),
+  lives: document.getElementById('lives'),
+  progress: document.getElementById('progress'),
+  timeline: document.getElementById('timeline'),
+  timelineHint: document.getElementById('timeline-hint'),
+  currentHost: document.getElementById('current-card-host'),
+  drawButton: document.getElementById('draw-event'),
+  feedback: document.getElementById('feedback'),
+  resultDialog: document.getElementById('result-dialog'),
+  resultMessage: document.getElementById('result-message'),
+  resultScore: document.getElementById('result-score'),
+  resultAccuracy: document.getElementById('result-accuracy'),
+  resultStreak: document.getElementById('result-streak'),
+  restartButton: document.getElementById('restart-game'),
+};
 
-        const events = [
-            { name: "Birth of Christ", year: 0 },
-            { name: "Fall of Rome", year: 476 },
-            { name: "Discovery of America", year: 1492 },
-            { name: "French Revolution", year: 1789 },
-            { name: "World War I Begins", year: 1914 },
-            { name: "Moon Landing", year: 1969 },
-            { name: "Fall of Berlin Wall", year: 1989 },
-            { name: "Internet Goes Public", year: 1991 },
-            { name: "9/11 Attacks", year: 2001 },
-            { name: "First iPhone Released", year: 2007 }
-        ];
+const params = new URLSearchParams(window.location.search);
+const parsedSeed = Number(params.get('seed'));
+const testSeed = Number.isFinite(parsedSeed) && params.has('seed')
+  ? parsedSeed
+  : null;
 
-        let availableEvents = [...events];
-        let currentEvent = null;
+function newGame() {
+  const rng = testSeed === null ? Math.random : createSeededRandom(testSeed);
+  return createGame(EVENTS, { deckSize: 10, rng });
+}
 
-        function updateGameInfo() {
-            scoreElement.textContent = score;
-            livesElement.textContent = '❤️'.repeat(lives);
-            progressElement.textContent = `${progress}/${totalCards}`;
-        }
+let state = newGame();
 
-        function drawCard() {
-            if (availableEvents.length === 0) {
-                endGame();
-                return;
-            }
+function categoryFor(event) {
+  return CATEGORY_META[event.category];
+}
 
-            const randomIndex = Math.floor(Math.random() * availableEvents.length);
-            currentEvent = availableEvents.splice(randomIndex, 1)[0];
-            
-            currentCard.querySelector('.card-title').textContent = currentEvent.name;
-            currentCard.querySelector('.card-year').textContent = currentEvent.year;
-            currentCard.classList.remove('flipped');
+function createTimelineCard(event) {
+  const category = categoryFor(event);
+  const card = document.createElement('article');
+  card.className = 'timeline-card';
+  card.dataset.year = String(event.year);
+  card.dataset.eventId = event.id;
+  card.style.setProperty('--accent', category.accent);
+  card.setAttribute('role', 'listitem');
 
-            drawCardButton.disabled = true;
-            currentCard.draggable = true;
-        }
+  const top = document.createElement('div');
+  top.className = 'timeline-card__top';
 
-        function createEventCard(event) {
-            const card = document.createElement('div');
-            card.className = 'card';
-            card.innerHTML = `
-                <div class="card-content">
-                    <div class="card-title">${event.name}</div>
-                    <div class="card-year">${event.year}</div>
-                </div>
-                <div class="card-back">?</div>
-            `;
-            card.addEventListener('click', () => flipCard(card));
-            return card;
-        }
+  const icon = document.createElement('span');
+  icon.className = 'timeline-card__icon';
+  icon.setAttribute('aria-hidden', 'true');
+  icon.textContent = event.icon;
 
-        function handleDragStart(e) {
-            e.dataTransfer.setData('text/plain', e.target.id);
-            setTimeout(() => (currentCard.style.opacity = '0.5'), 0);
-        }
+  const categoryLabel = document.createElement('span');
+  categoryLabel.className = 'timeline-card__category';
+  categoryLabel.textContent = category.label;
 
-        function handleDragEnd(e) {
-            currentCard.style.opacity = '1';
-            placementIndicator.style.display = 'none';
-            resetCardPositions();
-        }
+  const title = document.createElement('h2');
+  title.className = 'timeline-card__title';
+  title.textContent = event.title;
 
-        function handleDragOver(e) {
-            e.preventDefault();
-            const afterElement = getDragAfterElement(timeline, e.clientX);
-            updateCardPositions(afterElement);
-            placementIndicator.style.display = 'block';
-            if (afterElement) {
-                timeline.insertBefore(placementIndicator, afterElement);
-            } else {
-                timeline.appendChild(placementIndicator);
-            }
-        }
+  const year = document.createElement('p');
+  year.className = 'timeline-card__year';
+  year.textContent = String(event.year);
 
-        function handleDragLeave(e) {
-            placementIndicator.style.display = 'none';
-        }
+  top.append(icon, categoryLabel);
+  card.append(top, title, year);
+  return card;
+}
 
-        function handleDrop(e) {
-            e.preventDefault();
-            const id = e.dataTransfer.getData('text');
-            if (id === 'current-card' && currentEvent) {
-                const newCard = createEventCard(currentEvent);
-                const afterElement = getDragAfterElement(timeline, e.clientX);
-                if (afterElement) {
-                    timeline.insertBefore(newCard, afterElement);
-                } else {
-                    timeline.appendChild(newCard);
-                }
+function gapLabel(index) {
+  const previous = state.timeline[index - 1];
+  const next = state.timeline[index];
 
-                const isCorrect = validateCardPlacement(newCard);
-                if (isCorrect) {
-                    newCard.classList.add('correct');
-                    showFeedback("Correct placement!", true);
-                    score += 10;
-                } else {
-                    newCard.classList.add('incorrect');
-                    showFeedback("Incorrect placement. Try again!", false);
-                    lives--;
-                    if (lives <= 0) {
-                        endGame();
-                        return;
-                    }
-                }
+  if (!previous) return `Розмістити перед ${next.year} роком`;
+  if (!next) return `Розмістити після ${previous.year} року`;
+  return `Розмістити між ${previous.year} і ${next.year} роками`;
+}
 
-                currentCard.querySelector('.card-title').textContent = 'Draw a card';
-                currentCard.querySelector('.card-year').textContent = 'to continue!';
-                currentCard.draggable = false;
-                drawCardButton.disabled = false;
-                progress++;
+function createGap(index) {
+  const gap = document.createElement('button');
+  gap.className = 'gap-slot';
+  gap.type = 'button';
+  gap.dataset.gapIndex = String(index);
+  gap.setAttribute('aria-label', gapLabel(index));
 
-                updateGameInfo();
+  const marker = document.createElement('span');
+  marker.className = 'gap-slot__marker';
+  marker.setAttribute('aria-hidden', 'true');
+  marker.textContent = '+';
 
-                if (progress === totalCards) {
-                    endGame();
-                    return;
-                }
+  const label = document.createElement('span');
+  label.className = 'gap-slot__label';
+  label.textContent = 'сюди';
 
-                currentEvent = null;
-            }
-            placementIndicator.style.display = 'none';
-            resetCardPositions();
-        }
+  gap.append(marker, label);
+  return gap;
+}
 
-        function getDragAfterElement(container, x) {
-            const draggableElements = [...container.querySelectorAll('.card:not(.dragging)')];
-            return draggableElements.reduce((closest, child) => {
-                const box = child.getBoundingClientRect();
-                const offset = x - box.left - box.width / 2;
-                if (offset < 0 && offset > closest.offset) {
-                    return { offset: offset, element: child };
-                } else {
-                    return closest;
-                }
-            }, { offset: Number.NEGATIVE_INFINITY }).element;
-        }
+function renderTimeline() {
+  const fragment = document.createDocumentFragment();
 
-        function updateCardPositions(afterElement) {
-            const cards = timeline.querySelectorAll('.card');
-            cards.forEach(card => card.classList.remove('sliding-left', 'sliding-right'));
+  state.timeline.forEach((event, index) => {
+    if (state.phase === 'placing') fragment.append(createGap(index));
+    fragment.append(createTimelineCard(event));
+  });
 
-            if (afterElement) {
-                const previousElement = afterElement.previousElementSibling;
-                if (previousElement && previousElement.classList.contains('card')) {
-                    previousElement.classList.add('sliding-left');
-                    afterElement.classList.add('sliding-right');
-                } else {
-                    afterElement.classList.add('sliding-right');
-                }
-            } else if (cards.length > 0) {
-                cards[cards.length - 1].classList.add('sliding-left');
-            }
-        }
+  if (state.phase === 'placing') {
+    fragment.append(createGap(state.timeline.length));
+  }
 
-        function resetCardPositions() {
-            const cards = timeline.querySelectorAll('.card');
-            cards.forEach(card => {
-                card.classList.remove('sliding-left', 'sliding-right');
-            });
-        }
+  elements.timeline.replaceChildren(fragment);
+  elements.timelineHint.textContent = state.phase === 'placing'
+    ? 'Натисни на «+» у правильному місці.'
+    : 'Витягни подію, щоб обрати її місце.';
+}
 
-        function flipCard(card) {
-            card.classList.toggle('flipped');
-        }
+function createCurrentCard(event) {
+  const category = categoryFor(event);
+  const card = document.createElement('article');
+  card.className = 'current-card';
+  card.style.setProperty('--accent', category.accent);
 
-        function validateCardPlacement(newCard) {
-            const cards = Array.from(timeline.querySelectorAll('.card'));
-            const newCardIndex = cards.indexOf(newCard);
-            const newCardYear = parseInt(newCard.querySelector('.card-year').textContent);
+  const categoryRow = document.createElement('div');
+  categoryRow.className = 'current-card__category-row';
 
-            if (newCardIndex === 0) {
-                const nextCard = cards[1];
-                if (nextCard) {
-                    const nextCardYear = parseInt(nextCard.querySelector('.card-year').textContent);
-                    return newCardYear <= nextCardYear;
-                }
-            } else if (newCardIndex === cards.length - 1) {
-                const prevCard = cards[cards.length - 2];
-                const prevCardYear = parseInt(prevCard.querySelector('.card-year').textContent);
-                return newCardYear >= prevCardYear;
-            } else {
-                const prevCard = cards[newCardIndex - 1];
-                const nextCard = cards[newCardIndex + 1];
-                const prevCardYear = parseInt(prevCard.querySelector('.card-year').textContent);
-                const nextCardYear = parseInt(nextCard.querySelector('.card-year').textContent);
-                return newCardYear >= prevCardYear && newCardYear <= nextCardYear;
-            }
+  const categoryLabel = document.createElement('span');
+  categoryLabel.className = 'current-card__category';
+  categoryLabel.textContent = category.label;
 
-            return true;  // If there's only one card, it's always correct
-        }
+  const year = document.createElement('span');
+  year.className = 'current-card__year';
+  year.setAttribute('aria-label', 'Рік приховано');
+  year.textContent = '????';
 
-        function showFeedback(message, isCorrect) {
-            const feedback = document.getElementById('feedback');
-            feedback.textContent = message;
-            feedback.className = isCorrect ? 'correct' : 'incorrect';
-            feedback.style.display = 'block';
-            setTimeout(() => {
-                feedback.style.display = 'none';
-            }, 2000);
-        }
-        
-        function initializeGame() {
-            // Place a random card on the timeline to start
-            const randomIndex = Math.floor(Math.random() * availableEvents.length);
-            const initialEvent = availableEvents.splice(randomIndex, 1)[0];
-            const initialCard = createEventCard(initialEvent);
-            timeline.appendChild(initialCard);
-            progress++;
-            updateGameInfo();
-        }
+  const body = document.createElement('div');
+  body.className = 'current-card__body';
 
-        function endGame() {
-            drawCardButton.disabled = true;
-            if (lives <= 0) {
-                alert(`Game Over! You've run out of lives. Your final score is ${score}.`);
-            } else {
-                alert(`Congratulations! You've completed the game with a score of ${score}.`);
-            }
-        }
+  const icon = document.createElement('span');
+  icon.className = 'current-card__icon';
+  icon.setAttribute('aria-hidden', 'true');
+  icon.textContent = event.icon;
 
-        drawCardButton.addEventListener('click', drawCard);
-        currentCard.addEventListener('dragstart', handleDragStart);
-        currentCard.addEventListener('dragend', handleDragEnd);
-        timeline.addEventListener('dragover', handleDragOver);
-        timeline.addEventListener('dragleave', handleDragLeave);
-        timeline.addEventListener('drop', handleDrop);
+  const copy = document.createElement('div');
 
-        // Initialize the game
-        initializeGame();
-        updateGameInfo();
+  const title = document.createElement('h2');
+  title.className = 'current-card__title';
+  title.textContent = event.title;
+
+  const description = document.createElement('p');
+  description.className = 'current-card__description';
+  description.textContent = event.description;
+
+  categoryRow.append(categoryLabel, year);
+  copy.append(title, description);
+  body.append(icon, copy);
+  card.append(categoryRow, body);
+  return card;
+}
+
+function renderCurrentPanel() {
+  if (state.phase === 'placing') {
+    elements.currentHost.replaceChildren(createCurrentCard(state.current));
+  } else {
+    const empty = document.createElement('div');
+    empty.className = 'current-empty';
+
+    const symbol = document.createElement('span');
+    symbol.className = 'current-empty__symbol';
+    symbol.setAttribute('aria-hidden', 'true');
+    symbol.textContent = state.phase === 'finished' ? '✓' : '✦';
+
+    const copy = document.createElement('div');
+    const title = document.createElement('h2');
+    title.textContent = state.phase === 'finished'
+      ? 'Лінію завершено'
+      : 'Наступна подія чекає';
+    const description = document.createElement('p');
+    description.textContent = state.phase === 'finished'
+      ? 'Переглянь результат і спробуй ще раз.'
+      : 'Рік буде приховано — орієнтуйся на свої знання.';
+
+    copy.append(title, description);
+    empty.append(symbol, copy);
+    elements.currentHost.replaceChildren(empty);
+  }
+
+  elements.drawButton.disabled = state.phase !== 'ready';
+  elements.drawButton.hidden = state.phase !== 'ready';
+}
+
+function renderFeedback() {
+  const result = state.lastResult;
+  elements.feedback.className = 'feedback';
+
+  if (!result) {
+    elements.feedback.textContent = '';
+    return;
+  }
+
+  elements.feedback.classList.add(
+    result.correct ? 'feedback--correct' : 'feedback--correction',
+  );
+  elements.feedback.textContent = result.correct
+    ? `Точно! ${result.year} рік · +${result.scoreGain}`
+    : `Не зовсім. ${result.year} — правильне місце вже показано.`;
+}
+
+function renderDialog() {
+  if (state.phase !== 'finished') {
+    if (elements.resultDialog.open) elements.resultDialog.close();
+    return;
+  }
+
+  const decisions = state.correctCount + state.incorrectCount;
+  const accuracy = decisions === 0
+    ? 0
+    : Math.round((state.correctCount / decisions) * 100);
+
+  elements.resultMessage.textContent = state.lives === 0
+    ? 'Життя закінчилися, але кожна помилка вже стала підказкою.'
+    : 'Усі події на своїх місцях. Ти не загубився у часі.';
+  elements.resultScore.textContent = String(state.score);
+  elements.resultAccuracy.textContent = `${accuracy}%`;
+  elements.resultStreak.textContent = String(state.bestStreak);
+
+  if (!elements.resultDialog.open) elements.resultDialog.showModal();
+}
+
+function renderStats() {
+  elements.score.textContent = String(state.score);
+  elements.lives.textContent = String(state.lives);
+  elements.progress.textContent = `${state.resolvedCount}/${state.deckSize}`;
+}
+
+function focusResolvedCard() {
+  if (!state.lastResult) return;
+  const card = elements.timeline.querySelector(
+    `[data-event-id="${state.lastResult.eventId}"]`,
+  );
+  if (!card) return;
+
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  card.scrollIntoView({
+    behavior: reducedMotion ? 'auto' : 'smooth',
+    block: 'nearest',
+    inline: 'center',
+  });
+}
+
+function render({ scrollToResult = false } = {}) {
+  renderStats();
+  renderTimeline();
+  renderCurrentPanel();
+  renderFeedback();
+  renderDialog();
+
+  if (scrollToResult) requestAnimationFrame(focusResolvedCard);
+}
+
+elements.drawButton.addEventListener('click', () => {
+  if (state.phase !== 'ready') return;
+  state = drawEvent(state);
+  render();
+  elements.timeline.querySelector('.gap-slot')?.focus({ preventScroll: true });
+});
+
+elements.timeline.addEventListener('click', (event) => {
+  const gap = event.target.closest('.gap-slot');
+  if (!gap || state.phase !== 'placing') return;
+
+  state = placeCurrent(state, Number(gap.dataset.gapIndex));
+  render({ scrollToResult: true });
+});
+
+elements.restartButton.addEventListener('click', () => {
+  state = newGame();
+  render();
+  elements.drawButton.focus();
+});
+
+render();
