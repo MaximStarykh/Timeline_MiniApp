@@ -87,6 +87,14 @@ a {
 
 button {
     font: inherit;
+    touch-action: manipulation;
+}
+
+.timeline-card,
+.current-card,
+.gap-slot {
+    -webkit-user-select: none;
+    user-select: none;
 }
 
 img {
@@ -257,6 +265,17 @@ a:focus-visible {
     position: relative;
     min-height: 0;
     overflow: hidden;
+}
+
+.timeline-frame::after {
+    position: absolute;
+    z-index: 2;
+    inset: 0;
+    background:
+        linear-gradient(90deg, var(--lilac), transparent 26px),
+        linear-gradient(270deg, var(--lilac), transparent 26px);
+    content: "";
+    pointer-events: none;
 }
 
 .timeline-frame::before {
@@ -688,7 +707,7 @@ a:focus-visible {
     font-size: 42px;
 }
 
-@media (max-width: 359px) {
+@media (max-width: 379px) {
     .game-header,
     .section-heading,
     .current-panel {
@@ -703,12 +722,36 @@ a:focus-visible {
         gap: 7px;
     }
 
+    .stat dd {
+        font-size: 18px;
+    }
+
     .timeline-hint {
         display: none;
     }
 
+    .timeline-card {
+        flex-basis: 138px;
+        height: 200px;
+        grid-template-rows: 100px minmax(0, 1fr);
+    }
+
+    .gap-slot {
+        flex-basis: 60px;
+        height: 200px;
+    }
+
     .current-card__description {
         -webkit-line-clamp: 1;
+    }
+
+    .secondary-action {
+        padding: 0 10px;
+        font-size: 11px;
+    }
+
+    .primary-action {
+        font-size: 13px;
     }
 }
 
@@ -822,7 +865,12 @@ a:focus-visible {
     box-shadow: 0 6px 0 rgb(16 39 77 / 10%);
     cursor: pointer;
     text-align: inherit;
-    animation: preview-in 200ms ease;
+    animation: preview-in 200ms ease, preview-pulse 1.6s ease-in-out 400ms infinite;
+}
+
+@keyframes preview-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.02); }
 }
 
 .timeline-card--preview .timeline-card__visual {
@@ -1257,4 +1305,234 @@ a:focus-visible {
 .mode-option__body img,
 .result-actions .secondary-action img {
     filter: invert(14%) sepia(28%) saturate(2445%) hue-rotate(182deg) brightness(91%) contrast(94%);
+}
+
+
+/* Дуже низькі екрани (старі/маленькі смартфони): поточна картка стає горизонтальною */
+
+@media (max-height: 700px) {
+    .game-header {
+        min-height: 60px;
+        padding-top: max(8px, env(safe-area-inset-top));
+        padding-bottom: 8px;
+    }
+
+    .stat dd {
+        font-size: 17px;
+    }
+
+    .section-heading h1 {
+        font-size: clamp(19px, 5.5vw, 26px);
+    }
+
+    .timeline-region {
+        padding-top: 8px;
+    }
+
+    .timeline-card {
+        height: 168px;
+        flex-basis: 128px;
+        grid-template-rows: 76px minmax(0, 1fr);
+    }
+
+    .gap-slot {
+        height: 168px;
+        flex-basis: 56px;
+    }
+
+    .gap-slot__marker {
+        width: 34px;
+        height: 34px;
+    }
+
+    .current-panel {
+        gap: 7px;
+        padding-top: 8px;
+    }
+
+    .current-card {
+        max-height: 148px;
+        min-height: 132px;
+        grid-template-columns: 38% 62%;
+        grid-template-rows: none;
+    }
+
+    .current-card__content {
+        padding: 10px 12px;
+    }
+
+    .current-card__title,
+    .current-empty h2 {
+        font-size: clamp(14px, 4.2vw, 18px);
+    }
+
+    .current-card__description {
+        -webkit-line-clamp: 2;
+    }
+
+    .current-empty {
+        min-height: 84px;
+        padding: 10px 14px;
+    }
+
+    .current-empty__icon {
+        width: 36px;
+        height: 36px;
+        flex-basis: 36px;
+    }
+
+    .action-row .primary-action,
+    .action-row .secondary-action {
+        min-height: 46px;
+    }
+
+    .feedback {
+        min-height: 13px;
+        font-size: 9px;
+    }
+}
+
+/* === Confetti =========================================================== */
+
+.confetti-host {
+    position: fixed;
+    z-index: 50;
+    inset: 0;
+    pointer-events: none;
+}
+
+.confetti-layer {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+}
+
+.confetti-piece {
+    position: absolute;
+    top: -14px;
+    left: var(--x);
+    width: 9px;
+    height: 14px;
+    animation: confetti-fall var(--fall) ease-in var(--delay) forwards;
+    border-radius: 2px;
+    opacity: 0;
+}
+
+@keyframes confetti-fall {
+    0% { opacity: 1; transform: translateY(0) rotate(0deg); }
+    100% { opacity: .9; transform: translateY(105vh) rotate(var(--spin)); }
+}
+
+/* === Leaderboard ======================================================== */
+
+.leaderboard-dialog {
+    position: fixed;
+    inset: 50% auto auto 50%;
+    width: min(calc(100% - 28px), 430px);
+    max-height: calc(100dvh - 28px);
+    overflow-y: auto;
+    padding: 0;
+    border: 0;
+    border-radius: 26px;
+    background: var(--cream);
+    box-shadow: 0 28px 70px rgb(16 24 47 / 32%);
+    color: var(--card-ink);
+    transform: translate(-50%, -50%);
+}
+
+.leaderboard-dialog::backdrop {
+    background: rgb(16 39 77 / 54%);
+}
+
+.leaderboard-dialog__content {
+    display: grid;
+    padding: 24px;
+    gap: 12px;
+    text-align: center;
+}
+
+.leaderboard-dialog h2 {
+    margin: 0;
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: -.05em;
+    line-height: 1;
+}
+
+.leaderboard-tabs {
+    display: grid;
+    gap: 6px;
+    grid-template-columns: 1fr 1fr;
+}
+
+.leaderboard-tab {
+    display: grid;
+    min-height: 38px;
+    border: 2px solid rgb(16 39 77 / 15%);
+    border-radius: 12px;
+    background: var(--paper);
+    color: var(--card-ink);
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 800;
+    place-items: center;
+    transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease;
+}
+
+.leaderboard-tab--active {
+    border-color: var(--card-ink);
+    background: var(--card-ink);
+    color: white;
+}
+
+.leaderboard-status {
+    min-height: 14px;
+    margin: 0;
+    color: var(--card-ink-soft);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.leaderboard-list {
+    display: grid;
+    margin: 0;
+    padding: 0;
+    gap: 4px;
+    list-style: none;
+    text-align: left;
+}
+
+.leaderboard-list li {
+    display: grid;
+    align-items: center;
+    padding: 8px 12px;
+    border-radius: 12px;
+    background: var(--paper);
+    gap: 10px;
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+}
+
+.leaderboard-row--me {
+    border: 2px solid var(--card-ink);
+}
+
+.leaderboard-row__rank {
+    color: #785dad;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 800;
+}
+
+.leaderboard-row__name {
+    overflow: hidden;
+    font-size: 13px;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.leaderboard-row__score {
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 800;
 }

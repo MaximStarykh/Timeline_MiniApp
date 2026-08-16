@@ -9,7 +9,7 @@
     <link rel="icon" type="image/png" href="./images/icon.png">
     <link rel="manifest" href="./manifest.json">
     <link rel="preload" href="./fonts/manrope-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="./styles.css?v=20260816-2">
+    <link rel="stylesheet" href="./styles.css?v=20260816-3">
 </head>
 <body>
     <main id="app" class="app-shell">
@@ -146,6 +146,10 @@
                 <span>Почати гру</span>
                 <img src="./images/icons/arrow-right-bold.svg" alt="" aria-hidden="true">
             </button>
+            <button id="leaderboard-start" class="secondary-action" type="button" hidden>
+                <img src="./images/icons/trophy-bold.svg" alt="" aria-hidden="true">
+                <span>Лідерборд</span>
+            </button>
         </div>
     </dialog>
 
@@ -182,12 +186,34 @@
                     <img src="./images/icons/share-fill.svg" alt="" aria-hidden="true">
                     <span>Поділитися</span>
                 </button>
+                <button id="leaderboard-result" class="secondary-action" type="button" hidden>
+                    <img src="./images/icons/trophy-bold.svg" alt="" aria-hidden="true">
+                    <span>Лідерборд</span>
+                </button>
                 <button id="change-mode" class="secondary-action" type="button">
                     <span>Змінити режим</span>
                 </button>
             </div>
         </div>
     </dialog>
+
+    <dialog id="leaderboard-dialog" class="leaderboard-dialog" aria-labelledby="leaderboard-title">
+        <div class="leaderboard-dialog__content">
+            <p class="eyebrow">Найкращі гравці</p>
+            <h2 id="leaderboard-title">Лідерборд</h2>
+            <div id="leaderboard-tabs" class="leaderboard-tabs" role="tablist">
+                <button type="button" data-tab="global" class="leaderboard-tab leaderboard-tab--active">Глобальний</button>
+                <button type="button" data-tab="chat" class="leaderboard-tab">Цей чат</button>
+            </div>
+            <p id="leaderboard-status" class="leaderboard-status"></p>
+            <ol id="leaderboard-list" class="leaderboard-list"></ol>
+            <button id="leaderboard-close" class="primary-action" type="button">
+                <span>Закрити</span>
+            </button>
+        </div>
+    </dialog>
+
+    <div id="confetti-host" class="confetti-host" aria-hidden="true"></div>
 
     <script type="module" src="./script.js"></script>
 </body>

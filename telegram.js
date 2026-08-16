@@ -14,7 +14,14 @@ export function isTelegramEnvironment() {
 }
 
 function applyColorScheme(tg) {
-  document.documentElement.dataset.theme = tg.colorScheme === 'dark' ? 'dark' : 'light';
+  const dark = tg.colorScheme === 'dark';
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  try {
+    tg.setHeaderColor?.(dark ? '#16112b' : '#eee8ff');
+    tg.setBackgroundColor?.(dark ? '#16112b' : '#eee8ff');
+  } catch {
+    // старі клієнти
+  }
 }
 
 async function loadSdk() {
@@ -37,12 +44,91 @@ export async function initTelegram() {
   try {
     tg.ready();
     tg.expand();
+    // свайп униз згортає Mini App — під час гри це ламає скрол стрічки
+    tg.disableVerticalSwipes?.();
     applyColorScheme(tg);
     tg.onEvent?.('themeChanged', () => applyColorScheme(tg));
   } catch {
     // старі клієнти можуть не мати частини API
   }
   return tg;
+}
+
+// --- Нативні кнопки Telegram -------------------------------------------
+
+let mainButtonHandler = null;
+
+// Показує MainButton із текстом і обробником; null ховає кнопку.
+// Повертає true, якщо кнопка Telegram доступна (веб-кнопку тоді можна сховати).
+export function setMainButton(options) {
+  const tg = webApp();
+  const button = tg?.MainButton;
+  if (!button) return false;
+
+  try {
+    if (mainButtonHandler) {
+      button.offClick(mainButtonHandler);
+      mainButtonHandler = null;
+    }
+    if (!options) {
+      button.hide();
+      return true;
+    }
+    button.setParams({
+      text: options.text,
+      color: options.color ?? '#8868c4',
+      text_color: '#ffffff',
+      is_active: true,
+      is_visible: true,
+    });
+    mainButtonHandler = options.onClick;
+    button.onClick(mainButtonHandler);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+let backButtonHandler = null;
+
+export function setBackButton(onClick) {
+  const tg = webApp();
+  const button = tg?.BackButton;
+  if (!button) return false;
+
+  try {
+    if (backButtonHandler) {
+      button.offClick(backButtonHandler);
+      backButtonHandler = null;
+    }
+    if (!onClick) {
+      button.hide();
+      return true;
+    }
+    backButtonHandler = onClick;
+    button.onClick(backButtonHandler);
+    button.show();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function selectionHaptic() {
+  try {
+    webApp()?.HapticFeedback?.selectionChanged();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function telegramInitData() {
+  return webApp()?.initData ?? '';
+}
+
+export function telegramUser() {
+  return webApp()?.initDataUnsafe?.user ?? null;
 }
 
 export function haptic(kind) {

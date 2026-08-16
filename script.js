@@ -7,7 +7,15 @@ import {
   useHint,
 } from './game-engine.js';
 import { CATEGORY_META, EVENTS } from './events.js';
-import { haptic, initTelegram, shareText } from './telegram.js';
+import {
+  haptic,
+  initTelegram,
+  selectionHaptic,
+  setBackButton,
+  setMainButton,
+  shareText,
+} from './telegram.js';
+import { fetchLeaderboard, leaderboardAvailable, submitScore } from './leaderboard.js';
 import {
   addMistake,
   hydrateFromCloud,
@@ -84,6 +92,14 @@ const elements = {
   restartButton: document.getElementById('restart-game'),
   shareButton: document.getElementById('share-result'),
   changeModeButton: document.getElementById('change-mode'),
+  leaderboardStartButton: document.getElementById('leaderboard-start'),
+  leaderboardResultButton: document.getElementById('leaderboard-result'),
+  leaderboardDialog: document.getElementById('leaderboard-dialog'),
+  leaderboardTabs: document.getElementById('leaderboard-tabs'),
+  leaderboardList: document.getElementById('leaderboard-list'),
+  leaderboardStatus: document.getElementById('leaderboard-status'),
+  leaderboardClose: document.getElementById('leaderboard-close'),
+  confettiHost: document.getElementById('confetti-host'),
 };
 
 const params = new URLSearchParams(window.location.search);
@@ -366,6 +382,32 @@ function createCurrentEmpty() {
   return empty;
 }
 
+// true, коли роль головної кнопки виконує нативна MainButton Telegram
+let mainButtonMirrored = false;
+
+function syncTelegramButtons() {
+  if (state.phase === 'ready') {
+    mainButtonMirrored = setMainButton({
+      text: state.lastResult ? 'Наступна подія' : 'Витягнути подію',
+      onClick: drawAction,
+    });
+  } else if (state.phase === 'placing' && selectedGap !== null) {
+    mainButtonMirrored = setMainButton({
+      text: 'Підтвердити місце',
+      onClick: () => confirmAction(),
+    });
+  } else {
+    setMainButton(null);
+    mainButtonMirrored = false;
+  }
+
+  setBackButton(
+    state.phase === 'placing' && selectedGap !== null
+      ? cancelSelection
+      : null,
+  );
+}
+
 function renderCurrentPanel() {
   const content = state.phase === 'placing'
     ? createCurrentCard(state.current)
@@ -374,12 +416,12 @@ function renderCurrentPanel() {
 
   const placing = state.phase === 'placing';
   elements.drawButton.disabled = state.phase !== 'ready';
-  elements.drawButton.hidden = state.phase !== 'ready';
+  elements.drawButton.hidden = state.phase !== 'ready' || mainButtonMirrored;
   elements.drawButton.querySelector('span').textContent = state.lastResult
     ? 'Наступна подія'
     : 'Витягнути подію';
 
-  elements.confirmButton.hidden = !placing || selectedGap === null;
+  elements.confirmButton.hidden = !placing || selectedGap === null || mainButtonMirrored;
 
   elements.hintButton.hidden = !placing || state.hintRevealed;
   elements.hintButton.disabled = state.hintsLeft <= 0;
@@ -550,6 +592,7 @@ function focusResolvedCard() {
 
 function render({ scrollToResult = false } = {}) {
   elements.app.dataset.phase = state.phase;
+  syncTelegramButtons();
   renderStats();
   renderTimeline();
   renderCurrentPanel();
@@ -557,6 +600,30 @@ function render({ scrollToResult = false } = {}) {
   renderDialog();
 
   if (scrollToResult) requestAnimationFrame(focusResolvedCard);
+}
+
+const CONFETTI_COLORS = ['#ef6256', '#f5b922', '#168e8b', '#8868c4', '#338dce'];
+
+function launchConfetti() {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+  const layer = document.createElement('div');
+  layer.className = 'confetti-layer';
+  layer.setAttribute('aria-hidden', 'true');
+
+  for (let index = 0; index < 42; index += 1) {
+    const piece = document.createElement('span');
+    piece.className = 'confetti-piece';
+    piece.style.setProperty('--x', `${Math.random() * 100}%`);
+    piece.style.setProperty('--delay', `${Math.random() * 500}ms`);
+    piece.style.setProperty('--spin', `${Math.random() * 720 - 360}deg`);
+    piece.style.setProperty('--fall', `${1400 + Math.random() * 900}ms`);
+    piece.style.background = CONFETTI_COLORS[index % CONFETTI_COLORS.length];
+    layer.append(piece);
+  }
+
+  elements.confettiHost.replaceChildren(layer);
+  setTimeout(() => layer.remove(), 3000);
 }
 
 function startGame() {
@@ -588,24 +655,35 @@ function placeAt(gapIndex) {
       dailyDate: session.mode === 'daily' ? todayIso() : null,
     });
     firstEverGame = false;
+    if (state.lives > 0 && state.incorrectCount === 0) launchConfetti();
+    submitScore(session.mode, state.score);
   }
 
   render({ scrollToResult: true });
   if (state.phase === 'ready') elements.drawButton.focus({ preventScroll: true });
 }
 
-elements.drawButton.addEventListener('click', () => {
+function drawAction() {
   if (state.phase !== 'ready') return;
   state = drawEvent(state);
   selectedGap = null;
   render();
   elements.timeline.querySelector('.gap-slot')?.focus({ preventScroll: true });
-});
+}
 
-elements.confirmButton.addEventListener('click', () => {
+function confirmAction() {
   if (state.phase !== 'placing' || selectedGap === null) return;
   placeAt(selectedGap);
-});
+}
+
+function cancelSelection() {
+  if (state.phase !== 'placing' || selectedGap === null) return;
+  selectedGap = null;
+  render();
+}
+
+elements.drawButton.addEventListener('click', drawAction);
+elements.confirmButton.addEventListener('click', confirmAction);
 
 elements.hintButton.addEventListener('click', () => {
   if (state.phase !== 'placing' || state.hintsLeft <= 0 || state.hintRevealed) return;
@@ -627,7 +705,7 @@ elements.timeline.addEventListener('click', (event) => {
   if (!gap) return;
 
   selectedGap = Number(gap.dataset.gapIndex);
-  haptic('light');
+  if (!selectionHaptic()) navigator.vibrate?.(8);
   render();
   const previewCard = elements.timeline.querySelector('.timeline-card--preview');
   previewCard?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
@@ -638,8 +716,7 @@ document.addEventListener('keydown', (event) => {
   if (!state || state.phase !== 'placing') return;
 
   if (event.key === 'Escape' && selectedGap !== null) {
-    selectedGap = null;
-    render();
+    cancelSelection();
     return;
   }
 
@@ -680,6 +757,88 @@ elements.changeModeButton.addEventListener('click', () => {
   elements.resultDialog.close();
   openStartDialog();
 });
+
+// --- Лідерборд ----------------------------------------------------------
+
+let leaderboardTab = 'global';
+let leaderboardData = null;
+
+function renderLeaderboard() {
+  const board = leaderboardData?.[leaderboardTab] ?? [];
+
+  for (const button of elements.leaderboardTabs.querySelectorAll('button')) {
+    button.classList.toggle('leaderboard-tab--active', button.dataset.tab === leaderboardTab);
+  }
+
+  if (!leaderboardData) {
+    elements.leaderboardStatus.textContent = 'Завантаження…';
+    elements.leaderboardList.replaceChildren();
+    return;
+  }
+
+  if (board.length === 0) {
+    elements.leaderboardStatus.textContent = leaderboardTab === 'chat'
+      ? 'У цьому чаті ще ніхто не грав. Будь перш(им/ою)!'
+      : 'Поки порожньо — зіграй партію.';
+    elements.leaderboardList.replaceChildren();
+    return;
+  }
+
+  elements.leaderboardStatus.textContent = leaderboardData.me
+    ? `Твоє місце у глобальному топі: №${leaderboardData.me.rank}`
+    : '';
+
+  elements.leaderboardList.replaceChildren(
+    ...board.map((row) => {
+      const item = document.createElement('li');
+      if (row.me) item.classList.add('leaderboard-row--me');
+
+      const rank = document.createElement('span');
+      rank.className = 'leaderboard-row__rank';
+      rank.textContent = `${row.rank}`;
+
+      const name = document.createElement('span');
+      name.className = 'leaderboard-row__name';
+      name.textContent = row.me ? `${row.name} (ти)` : row.name;
+
+      const score = document.createElement('span');
+      score.className = 'leaderboard-row__score';
+      score.textContent = String(row.score);
+
+      item.append(rank, name, score);
+      return item;
+    }),
+  );
+}
+
+async function openLeaderboard() {
+  leaderboardData = null;
+  renderLeaderboard();
+  if (!elements.leaderboardDialog.open) elements.leaderboardDialog.showModal();
+  leaderboardData = await fetchLeaderboard(session.mode);
+  if (leaderboardData === null) {
+    elements.leaderboardStatus.textContent = 'Не вдалося завантажити. Спробуй пізніше.';
+    return;
+  }
+  renderLeaderboard();
+}
+
+elements.leaderboardTabs.addEventListener('click', (event) => {
+  const tab = event.target.closest('button')?.dataset.tab;
+  if (!tab) return;
+  leaderboardTab = tab;
+  renderLeaderboard();
+});
+
+elements.leaderboardStartButton.addEventListener('click', openLeaderboard);
+elements.leaderboardResultButton.addEventListener('click', openLeaderboard);
+elements.leaderboardClose.addEventListener('click', () => elements.leaderboardDialog.close());
+
+function syncLeaderboardButtons() {
+  const available = leaderboardAvailable();
+  elements.leaderboardStartButton.hidden = !available;
+  elements.leaderboardResultButton.hidden = !available;
+}
 
 function checkedMode() {
   return elements.startDialog.querySelector('input[name="mode"]:checked').value;
@@ -733,7 +892,13 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-initTelegram();
+syncLeaderboardButtons();
+initTelegram().then((tg) => {
+  if (!tg) return;
+  syncLeaderboardButtons();
+  // після ініціалізації SDK головна кнопка переїжджає в нативну MainButton
+  if (state) render();
+});
 hydrateFromCloud().then(() => {
   if (elements.startDialog.open) syncStartDialog();
 });

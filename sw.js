@@ -1,6 +1,6 @@
 // Простий офлайн-кеш: статика кешується під час встановлення,
 // запити виконуються за схемою cache-first із фоновим оновленням.
-const CACHE = 'timeline-v1';
+const CACHE = 'timeline-v2';
 
 const ASSETS = [
   './',
@@ -11,6 +11,8 @@ const ASSETS = [
   './events.js',
   './storage.js',
   './telegram.js',
+  './config.js',
+  './leaderboard.js',
   './manifest.json',
   './fonts/manrope-cyrillic.woff2',
   './fonts/manrope-cyrillic-ext.woff2',
