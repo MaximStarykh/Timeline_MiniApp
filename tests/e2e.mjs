@@ -52,7 +52,9 @@ page.on('console', (message) => {
 });
 page.on('pageerror', (error) => browserErrors.push(error.message));
 page.on('requestfailed', (request) => {
-  failedRequests.push(`${request.url()}: ${request.failure()?.errorText}`);
+  const reason = request.failure()?.errorText;
+  if (reason === 'net::ERR_ABORTED') return; // запит скасовано навігацією — не помилка
+  failedRequests.push(`${request.url()}: ${reason}`);
 });
 page.on('response', (response) => {
   if (response.status() >= 400) {
