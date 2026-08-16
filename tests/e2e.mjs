@@ -15,6 +15,9 @@ const TYPES = {
   '.js': 'text/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.webp': 'image/webp',
+  '.woff2': 'font/woff2',
 };
 
 const server = createServer(async (request, response) => {
@@ -75,7 +78,25 @@ async function currentEvent() {
   return event;
 }
 
+async function placeAtGap(gapIndex) {
+  await page.locator(`.gap-slot[data-gap-index="${gapIndex}"]`).click();
+  await page.locator('#confirm-place').click();
+}
+
 try {
+  await page.goto(`${baseUrl}/`, { waitUntil: 'networkidle' });
+  assert.equal(
+    await page.locator('#start-dialog').evaluate((dialog) => dialog.open),
+    true,
+    'Start dialog greets a direct visit',
+  );
+  await page.locator('.mode-option input[value="classic"]').check();
+  await page.locator('#start-game').click();
+  assert.equal(
+    await page.locator('#start-dialog').evaluate((dialog) => dialog.open),
+    false,
+  );
+
   await page.goto(`${baseUrl}/?seed=17`, { waitUntil: 'networkidle' });
 
   assert.equal(await page.locator('#progress').textContent(), '1/10');
@@ -88,6 +109,19 @@ try {
   assert.equal(await page.locator('.gap-slot').count(), 2);
   assert.equal(await page.locator('#draw-event').isVisible(), false);
 
+  await page.locator('#hint-button').click();
+  assert.match(await page.locator('#feedback').textContent(), /підказка/i);
+  assert.match(
+    await page.locator('.current-card__hint').textContent(),
+    /половина .+ століття/i,
+  );
+
+  await page.locator('.gap-slot[data-gap-index="0"]').click();
+  assert.equal(await page.locator('.timeline-card--preview').count(), 1);
+  assert.equal(await page.locator('#confirm-place').isVisible(), true);
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('.timeline-card--preview').count(), 0);
+
   const timelineFrame = await page.locator('.timeline-frame').boundingBox();
   const currentPanel = await page.locator('#current-panel').boundingBox();
   const verticalGap = currentPanel.y - (timelineFrame.y + timelineFrame.height);
@@ -97,10 +131,11 @@ try {
   const initialYears = await readTimelineYears();
   const firstCorrectGap = correctGap(firstEvent.year, initialYears);
   const wrongGap = firstCorrectGap === 0 ? initialYears.length : 0;
-  await page.locator(`.gap-slot[data-gap-index="${wrongGap}"]`).click();
+  await placeAtGap(wrongGap);
 
   assert.equal(await page.locator('#lives').textContent(), '2');
-  assert.match(await page.locator('#feedback').textContent(), /правильне місце/i);
+  assert.match(await page.locator('#feedback').textContent(), /це був \d+ рік/i);
+  assert.equal(await page.locator('.timeline-card__badge').count(), 1);
   const correctedYears = await readTimelineYears();
   assert.deepEqual(correctedYears, [...correctedYears].sort((a, b) => a - b));
 
@@ -109,18 +144,37 @@ try {
     const event = await currentEvent();
     const years = await readTimelineYears();
     const gap = correctGap(event.year, years);
-    await page.locator(`.gap-slot[data-gap-index="${gap}"]`).click();
+    await placeAtGap(gap);
   }
 
   assert.equal(await page.locator('#progress').textContent(), '10/10');
   assert.match(await page.locator('#result-score').textContent(), /^\d+$/);
   assert.match(await page.locator('#result-accuracy').textContent(), /^\d+%$/);
+  assert.equal(await page.locator('#result-mistakes').isVisible(), true);
+  assert.equal(await page.locator('#result-mistakes-list li').count(), 1);
 
   await page.locator('#restart-game').click();
   assert.equal(await page.locator('#result-dialog').evaluate((dialog) => dialog.open), false);
   assert.equal(await page.locator('#progress').textContent(), '1/10');
   assert.equal(await page.locator('#lives').textContent(), '3');
   assert.equal(await page.locator('.timeline-card').count(), 1);
+
+  // Режим «Помилки» заблокований, поки в банку менше ніж 5 подій.
+  await page.goto(`${baseUrl}/`, { waitUntil: 'networkidle' });
+  assert.equal(await page.locator('#mistakes-input').isDisabled(), true);
+  assert.match(await page.locator('#mistakes-hint').textContent(), /відкриється/i);
+
+  // Марафон роздає всю колоду каталогу.
+  await page.goto(`${baseUrl}/?mode=marathon`, { waitUntil: 'networkidle' });
+  assert.equal(await page.locator('#progress').textContent(), `1/${EVENTS.length}`);
+
+  // Виклик дня детермінований у межах доби.
+  await page.goto(`${baseUrl}/?mode=daily`, { waitUntil: 'networkidle' });
+  await page.locator('#draw-event').click();
+  const dailyFirstTitle = await page.locator('.current-card__title').textContent();
+  await page.goto(`${baseUrl}/?mode=daily`, { waitUntil: 'networkidle' });
+  await page.locator('#draw-event').click();
+  assert.equal(await page.locator('.current-card__title').textContent(), dailyFirstTitle);
 
   assert.deepEqual(browserErrors, []);
   assert.deepEqual(failedRequests, []);

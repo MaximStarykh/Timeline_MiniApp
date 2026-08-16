@@ -3,34 +3,45 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#111827">
+    <meta name="theme-color" content="#eee8ff">
     <meta name="description" content="Мобільна гра про хронологію української історії">
-    <title>Не загубись у часі</title>
+    <title>Лінія часу</title>
     <link rel="icon" type="image/png" href="./images/icon.png">
     <link rel="manifest" href="./manifest.json">
-    <link rel="stylesheet" href="./styles.css">
+    <link rel="preload" href="./fonts/manrope-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="./styles.css?v=20260816-2">
 </head>
 <body>
     <main id="app" class="app-shell">
         <header class="game-header">
             <a class="brand" href="./" aria-label="Почати нову гру">
-                <span class="brand__orbit" aria-hidden="true">◌</span>
-                <span>
-                    <strong>Не загубись</strong>
-                    <small>у часі</small>
-                </span>
+                <span class="brand__name">Лінія<br>часу</span>
+                <img class="brand__sparkle" src="./images/icons/sparkle-fill.svg" alt="" aria-hidden="true">
             </a>
 
             <dl class="game-stats" aria-label="Стан гри">
-                <div class="stat">
+                <div class="stat stat--score">
                     <dt>Рахунок</dt>
-                    <dd id="score">0</dd>
+                    <dd>
+                        <span id="score">0</span>
+                        <span id="score-float" class="score-float" aria-hidden="true"></span>
+                    </dd>
                 </div>
-                <div class="stat">
+                <div class="stat stat--streak">
+                    <dt>Серія</dt>
+                    <dd>
+                        <span id="streak">0</span>
+                        <img id="streak-flame" class="streak-flame" src="./images/icons/flame-fill.svg" alt="" aria-hidden="true" hidden>
+                    </dd>
+                </div>
+                <div class="stat stat--lives">
                     <dt>Життя</dt>
-                    <dd><span aria-hidden="true">♥</span> <span id="lives">3</span></dd>
+                    <dd>
+                        <span id="lives" class="visually-hidden">3</span>
+                        <span id="life-icons" class="life-icons" aria-hidden="true"></span>
+                    </dd>
                 </div>
-                <div class="stat">
+                <div class="stat stat--progress">
                     <dt>Події</dt>
                     <dd id="progress">1/10</dd>
                 </div>
@@ -40,35 +51,114 @@
         <section id="timeline-region" class="timeline-region" aria-labelledby="timeline-title">
             <div class="section-heading">
                 <div>
-                    <p class="eyebrow">Твоя лінія</p>
+                    <p class="eyebrow" id="mode-label">Класика</p>
                     <h1 id="timeline-title">Що було раніше?</h1>
                 </div>
-                <p id="timeline-hint" class="timeline-hint">Витягни подію, щоб обрати її місце.</p>
+                <p id="timeline-hint" class="timeline-hint">Витягни подію та знайди її місце.</p>
             </div>
             <div class="timeline-frame">
                 <div id="timeline" class="timeline" role="list" aria-label="Хронологія подій"></div>
             </div>
         </section>
 
-        <section id="current-panel" class="current-panel" aria-label="Поточна подія" aria-live="polite">
+        <section id="current-panel" class="current-panel" aria-label="Поточна подія">
             <div id="current-card-host" class="current-card-host"></div>
-            <button id="draw-event" class="primary-action" type="button">
-                <span>Витягнути подію</span>
-                <span aria-hidden="true">→</span>
-            </button>
+            <div class="action-row">
+                <button id="hint-button" class="secondary-action" type="button" hidden>
+                    <img src="./images/icons/lightbulb-fill.svg" alt="" aria-hidden="true">
+                    <span>Підказка · −50</span>
+                </button>
+                <button id="draw-event" class="primary-action" type="button">
+                    <span>Витягнути подію</span>
+                    <img src="./images/icons/arrow-right-bold.svg" alt="" aria-hidden="true">
+                </button>
+                <button id="confirm-place" class="primary-action" type="button" hidden>
+                    <img src="./images/icons/check-circle-fill.svg" alt="" aria-hidden="true">
+                    <span>Підтвердити місце</span>
+                </button>
+            </div>
             <div id="feedback" class="feedback" role="status" aria-live="polite"></div>
         </section>
     </main>
 
+    <dialog id="start-dialog" class="start-dialog" aria-labelledby="start-title">
+        <div class="start-dialog__content">
+            <p class="eyebrow">Гра про українську історію</p>
+            <h2 id="start-title">Лінія часу</h2>
+            <p class="start-intro">Тягни картку події, вгадуй її місце у хронології. Рік прихований — орієнтуйся на знання та інтуїцію.</p>
+
+            <fieldset class="mode-picker">
+                <legend class="visually-hidden">Режим гри</legend>
+                <label class="mode-option">
+                    <input type="radio" name="mode" value="classic" checked>
+                    <span class="mode-option__body">
+                        <img src="./images/icons/cards-fill.svg" alt="" aria-hidden="true">
+                        <span class="mode-option__title">Класика</span>
+                        <span class="mode-option__hint">10 подій · 3 життя</span>
+                    </span>
+                </label>
+                <label class="mode-option">
+                    <input type="radio" name="mode" value="marathon">
+                    <span class="mode-option__body">
+                        <img src="./images/icons/infinity-bold.svg" alt="" aria-hidden="true">
+                        <span class="mode-option__title">Марафон</span>
+                        <span class="mode-option__hint">Всі події · 3 життя</span>
+                    </span>
+                </label>
+                <label class="mode-option">
+                    <input type="radio" name="mode" value="daily">
+                    <span class="mode-option__body">
+                        <img src="./images/icons/calendar-fill.svg" alt="" aria-hidden="true">
+                        <span class="mode-option__title">Виклик дня</span>
+                        <span class="mode-option__hint">Однакова партія для всіх</span>
+                    </span>
+                </label>
+                <label class="mode-option" id="mistakes-option">
+                    <input type="radio" name="mode" value="mistakes" id="mistakes-input">
+                    <span class="mode-option__body">
+                        <img src="./images/icons/x-circle-fill.svg" alt="" aria-hidden="true">
+                        <span class="mode-option__title">Помилки</span>
+                        <span class="mode-option__hint" id="mistakes-hint">відкриється після 5 помилок</span>
+                    </span>
+                </label>
+            </fieldset>
+
+            <fieldset class="difficulty-picker" id="difficulty-picker">
+                <legend class="visually-hidden">Складність</legend>
+                <label class="difficulty-option">
+                    <input type="radio" name="difficulty" value="easy">
+                    <span>Легко</span>
+                </label>
+                <label class="difficulty-option">
+                    <input type="radio" name="difficulty" value="normal" checked>
+                    <span>Звичайно</span>
+                </label>
+                <label class="difficulty-option">
+                    <input type="radio" name="difficulty" value="hard">
+                    <span>Складно ×1.5</span>
+                </label>
+            </fieldset>
+
+            <p id="player-stats" class="player-stats" hidden></p>
+            <p id="best-score" class="best-score" hidden></p>
+
+            <button id="start-game" class="primary-action" type="button">
+                <span>Почати гру</span>
+                <img src="./images/icons/arrow-right-bold.svg" alt="" aria-hidden="true">
+            </button>
+        </div>
+    </dialog>
+
     <dialog id="result-dialog" class="result-dialog" aria-labelledby="result-title">
         <div class="result-dialog__content">
-            <p class="eyebrow">Партію завершено</p>
-            <h2 id="result-title">Твій результат</h2>
+            <img class="result-dialog__icon" id="result-icon" src="./images/icons/trophy-bold.svg" alt="" aria-hidden="true">
+            <p class="eyebrow" id="result-mode">Партію завершено</p>
+            <h2 id="result-title">Твоя лінія готова</h2>
             <p id="result-message" class="result-message"></p>
             <dl class="result-grid">
-                <div>
+                <div class="result-grid__score">
                     <dt>Рахунок</dt>
-                    <dd id="result-score">0</dd>
+                    <dd><span id="result-score">0</span><span id="result-record" class="result-record" hidden>новий рекорд</span></dd>
                 </div>
                 <div>
                     <dt>Точність</dt>
@@ -79,7 +169,23 @@
                     <dd id="result-streak">0</dd>
                 </div>
             </dl>
-            <button id="restart-game" class="primary-action" type="button">Зіграти ще раз</button>
+            <div id="result-mistakes" class="result-mistakes" hidden>
+                <p class="result-mistakes__title">Запам’ятай на наступну партію</p>
+                <ul id="result-mistakes-list" class="result-mistakes__list"></ul>
+            </div>
+            <div class="result-actions">
+                <button id="restart-game" class="primary-action" type="button">
+                    <img src="./images/icons/arrow-clockwise-bold.svg" alt="" aria-hidden="true">
+                    <span>Зіграти ще раз</span>
+                </button>
+                <button id="share-result" class="secondary-action" type="button">
+                    <img src="./images/icons/share-fill.svg" alt="" aria-hidden="true">
+                    <span>Поділитися</span>
+                </button>
+                <button id="change-mode" class="secondary-action" type="button">
+                    <span>Змінити режим</span>
+                </button>
+            </div>
         </div>
     </dialog>
 
