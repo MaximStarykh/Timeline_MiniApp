@@ -2,21 +2,26 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  HINTS_PER_GAME,
+  HINT_COST,
+  buildDeck,
   createGame,
   createSeededRandom,
   drawEvent,
+  hintFor,
   insertChronologically,
   isGapCorrect,
   placeCurrent,
+  useHint,
 } from '../game-engine.js';
 
 const FIXTURES = [
-  { id: 'a', year: 100, title: 'A' },
-  { id: 'b', year: 200, title: 'B' },
-  { id: 'c', year: 300, title: 'C' },
-  { id: 'd', year: 400, title: 'D' },
-  { id: 'e', year: 500, title: 'E' },
-  { id: 'f', year: 500, title: 'F' },
+  { id: 'a', year: 100, title: 'A', difficulty: 1 },
+  { id: 'b', year: 200, title: 'B', difficulty: 1 },
+  { id: 'c', year: 300, title: 'C', difficulty: 2 },
+  { id: 'd', year: 400, title: 'D', difficulty: 2 },
+  { id: 'e', year: 500, title: 'E', difficulty: 3 },
+  { id: 'f', year: 500, title: 'F', difficulty: 3 },
 ];
 
 function makePlacingState({
@@ -31,20 +36,30 @@ function makePlacingState({
   correctCount = 0,
   incorrectCount = 0,
   deckSize = 4,
+  difficulty = 'normal',
+  hintsLeft = HINTS_PER_GAME,
+  hintRevealed = false,
+  mistakes = [],
 } = {}) {
   return {
     deckSize,
+    difficulty,
     drawPile,
     timeline,
     current,
     phase: 'placing',
     lives,
+    maxLives: 3,
     score,
     streak,
     bestStreak,
     resolvedCount,
     correctCount,
     incorrectCount,
+    hintsLeft,
+    hintRevealed,
+    mistakes,
+    history: [],
     lastResult: null,
   };
 }
@@ -66,6 +81,8 @@ test('creates a unique deterministic session with one anchor', () => {
   assert.equal(first.drawPile.length, 3);
   assert.equal(first.resolvedCount, 1);
   assert.equal(first.phase, 'ready');
+  assert.equal(first.hintsLeft, HINTS_PER_GAME);
+  assert.deepEqual(first.mistakes, []);
 });
 
 test('validates deck size boundaries', () => {
@@ -77,6 +94,31 @@ test('validates deck size boundaries', () => {
     () => createGame(FIXTURES, { deckSize: 1 }),
     /at least 2/i,
   );
+});
+
+test('easy decks prefer well-known events and wide year gaps', () => {
+  const deck = buildDeck(FIXTURES, {
+    deckSize: 2,
+    difficulty: 'easy',
+    rng: createSeededRandom(5),
+  });
+
+  assert.equal(deck.length, 2);
+  for (const event of deck) {
+    assert.equal(event.difficulty, 1);
+  }
+  assert.ok(Math.abs(deck[0].year - deck[1].year) >= 25);
+});
+
+test('hard decks may include expert events', () => {
+  const deck = buildDeck(FIXTURES, {
+    deckSize: FIXTURES.length,
+    difficulty: 'hard',
+    rng: createSeededRandom(5),
+  });
+
+  assert.equal(deck.length, FIXTURES.length);
+  assert.ok(deck.some((event) => event.difficulty === 3));
 });
 
 test('draws exactly one current event only from the ready phase', () => {
@@ -133,6 +175,28 @@ test('awards base and streak score for consecutive correct placements', () => {
   assert.equal(second.phase, 'finished');
 });
 
+test('awards a precision bonus for placing into a tight middle gap', () => {
+  const tightNeighbors = [
+    { id: 'x', year: 290, title: 'X' },
+    { id: 'y', year: 320, title: 'Y' },
+  ];
+  const resolved = placeCurrent(makePlacingState({
+    timeline: tightNeighbors,
+    current: FIXTURES[2],
+  }), 1);
+
+  assert.equal(resolved.lastResult.correct, true);
+  assert.equal(resolved.lastResult.precisionBonus, 50);
+  assert.equal(resolved.score, 150);
+});
+
+test('multiplies score gains on hard difficulty', () => {
+  const resolved = placeCurrent(makePlacingState({ difficulty: 'hard' }), 1);
+
+  assert.equal(resolved.lastResult.scoreGain, 150);
+  assert.equal(resolved.score, 150);
+});
+
 test('corrects a wrong placement, loses one life, and preserves sorted order', () => {
   const state = makePlacingState({
     timeline: [FIXTURES[0], FIXTURES[3]],
@@ -146,11 +210,15 @@ test('corrects a wrong placement, loses one life, and preserves sorted order', (
 
   assert.equal(resolved.lastResult.correct, false);
   assert.equal(resolved.lastResult.year, 300);
+  assert.equal(resolved.lastResult.correctGap, 1);
+  assert.equal(resolved.lastResult.positionDelta, 1);
   assert.equal(resolved.lives, 2);
   assert.equal(resolved.streak, 0);
   assert.equal(resolved.bestStreak, 3);
   assert.equal(resolved.score, 500);
   assert.equal(resolved.incorrectCount, 1);
+  assert.deepEqual(resolved.mistakes.map((event) => event.id), ['c']);
+  assert.deepEqual(resolved.history, [false]);
   assert.deepEqual(resolved.timeline.map((event) => event.year), [100, 300, 400]);
   assert.equal(resolved.phase, 'ready');
   assert.equal(resolved.current, null);
@@ -199,4 +267,30 @@ test('rejects placement outside the placing phase or legal gap range', () => {
     () => placeCurrent(placing, placing.timeline.length + 1),
     /invalid gap/i,
   );
+});
+
+test('hints cost score, are limited, and reset on the next draw', () => {
+  const placing = makePlacingState({ score: 120 });
+  const hinted = useHint(placing);
+
+  assert.equal(hinted.hintsLeft, HINTS_PER_GAME - 1);
+  assert.equal(hinted.hintRevealed, true);
+  assert.equal(hinted.score, 120 - HINT_COST);
+  assert.throws(() => useHint(hinted), /no hints/i);
+
+  const poor = useHint(makePlacingState({ score: 10 }));
+  assert.equal(poor.score, 0);
+
+  const afterPlacement = placeCurrent(hinted, 1);
+  assert.equal(afterPlacement.hintRevealed, false);
+
+  const exhausted = makePlacingState({ hintsLeft: 0 });
+  assert.throws(() => useHint(exhausted), /no hints/i);
+});
+
+test('describes the hidden year as a half-century hint', () => {
+  assert.equal(hintFor({ year: 988 }), 'Друга половина X століття');
+  assert.equal(hintFor({ year: 1710 }), 'Перша половина XVIII століття');
+  assert.equal(hintFor({ year: 2022 }), 'Перша половина XXI століття');
+  assert.equal(hintFor({ year: 1861 }), 'Друга половина XIX століття');
 });
