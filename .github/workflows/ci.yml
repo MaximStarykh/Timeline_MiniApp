@@ -25,9 +25,6 @@ jobs:
   deploy:
     needs: verify
     if: github.ref == 'refs/heads/main'
-    # Pages вимагає публічного репозиторію на безкоштовному тарифі;
-    # доки репо приватне, ця джоба не блокує CI.
-    continue-on-error: true
     runs-on: ubuntu-latest
     environment:
       name: github-pages
